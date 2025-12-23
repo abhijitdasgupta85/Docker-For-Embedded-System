@@ -1,72 +1,265 @@
 # ARM Bare-Metal Platform – Docker Build & Run Environment
-======================================
-**Overview**
------------------------------
-This repository provides a Docker-based build and execution environment for an ARM Cortex-A bare-metal project, specifically:
-  arm-baremetal-qemu-lab (application repo)
 
-The Docker image:
-  - Clones the required GitHub repositories 
-  - Builds the bare-metal executables inside Docker
-  - Runs the resulting ELF on QEMU
-  - Eliminates the need for local toolchain installation
-  - Is fully CI/CD-ready
-  - This repository acts as an integration / platform layer, not an application repo.
+## Overview
 
-**Architecture Overview**
------------------------------
+This repository provides a **Docker-based build and execution environment** for an  
+**ARM Cortex-A bare-metal project**, specifically the repository:
+
+- **arm-baremetal-qemu-lab**
+
+The Docker image created from this repository:
+
+- Clones the required GitHub repository
+- Builds **ARM bare-metal executables inside Docker**
+- Runs the generated ELF on **QEMU**
+- Eliminates the need for local toolchain installation
+- Is fully **CI/CD-ready**
+
+This repository acts as a **platform / integration layer**, not an application repository.
+
+---
+
+## Why This Repository Exists
+
+In real embedded systems projects:
+
+- Toolchains are heavy and OS-dependent
+- Multiple repositories are involved
+- Reproducibility is critical
+- CI must produce the *same binaries* as developers
+
+This repository makes Docker the **single source of truth** for:
+- Build environment
+- Toolchain versions
+- Executable generation
+- Runtime testing using QEMU
+
+---
+
+## Architecture Overview
+
+```
 Host / CI
    |
    |  docker build
    v
 Docker Image
    |
-   |-- clones application repo(s)
+   |-- clones arm-baremetal-qemu-lab
    |-- builds ARM bare-metal executables
-   |-- packages artifacts
+   |-- packages build artifacts
    |-- runs QEMU
+```
 
-**Repositories Used**
- ---------------------------------------
-    | Repository               | Purpose                             |
-    | ------------------------ | ----------------------------------- |
-    | `arm-baremetal-qemu-lab` | ARM Cortex-A bare-metal application |
+---
 
-**Directory Structure (This Repo)**
---------------------------------------
-  arm-platform-docker/
-  ├── Dockerfile
-  ├── .dockerignore
-  ├── README.md
-  └── entrypoint/
-      └── entrypoint.sh   (optional)
+## Repositories Used
 
-**Directory Structure (Inside Docker Image)** 
-------------------------------------------------
-After build, the container filesystem looks like:
+| Repository | Purpose |
+|----------|--------|
+| arm-baremetal-qemu-lab | ARM Cortex-A bare-metal application |
 
-  /opt/arm-platform/
-  ├── app/
-  │   ├── build/
-  │   │   └── kernel.elf
-  │   ├── scripts/
-  │   └── tools/
+Additional repositories (shared libraries, schedulers, tools) can be added later without changing this architecture.
 
-**Build the Docker Image**
-------------------------------------------------
+---
+
+## Repository Structure (This Repo)
+
+```
+arm-platform-docker/
+├── Dockerfile
+├── .dockerignore
+├── README.md
+└── entrypoint/
+    └── entrypoint.sh   (optional)
+```
+
+This repository contains **no application source code**.
+
+---
+
+## Directory Structure (Inside Docker Image)
+
+After the Docker image is built, the container filesystem looks like:
+
+```
+/opt/arm-platform/
+├── app/
+│   ├── build/
+│   │   └── kernel.elf
+│   ├── scripts/
+│   ├── tools/
+│   ├── src/
+│   ├── linker/
+│   └── include/
+```
+
+- `kernel.elf` is **built inside Docker**
+- No compilation happens on the host system
+
+---
+
+## Docker Build Strategy
+
+This project uses a **multi-stage Docker build**.
+
+### Stage 1 – Builder
+- Installs ARM bare-metal toolchain
+- Clones `arm-baremetal-qemu-lab`
+- Executes `make`
+- Produces `kernel.elf`
+
+### Stage 2 – Runtime
+- Installs QEMU and Python
+- Copies only required executables and scripts
+- Keeps the image clean and minimal
+
+This mirrors **professional BSP / SDK build pipelines**.
+
+---
+
+## Build the Docker Image
+
+From the root of this repository:
+
+```bash
 docker build -t arm-baremetal-qemu .
+```
 
-**Run the Container**
-------------------------------------------------
+This step:
+- Clones the application repository
+- Builds the ARM bare-metal executable
+- Packages the result into the image
+
+---
+
+## Run the Container
+
+```bash
 docker run --rm -it arm-baremetal-qemu
+```
 
 Inside the container:
-  cd /opt/arm-platform/app
-  ./scripts/run_qemu.sh
 
-**Export Built Executables (Optional)**
------------------------------------------
-To extract the built ELF file to the host:
-    docker run --rm -v $(pwd)/out:/out arm-baremetal-qemu cp /opt/arm-platform/app/build/kernel.elf /out/
+```bash
+cd /opt/arm-platform/app
+./scripts/run_qemu.sh
+```
 
+You should see UART output from QEMU in the terminal.
 
+---
+
+## Running the Python UART Simulator
+
+The Python UART simulator is included from the application repository.
+
+Run it inside the container using:
+
+```bash
+python3 tools/uart_sim.py
+```
+
+This script:
+- Sends characters to the QEMU UART
+- Receives echoed data
+- Displays the UART traffic on the console
+
+---
+
+## Export Built Executables (Optional)
+
+To copy the built ELF file to the host:
+
+```bash
+docker run --rm \
+  -v $(pwd)/out:/out \
+  arm-baremetal-qemu \
+  cp /opt/arm-platform/app/build/kernel.elf /out/
+```
+
+Result on the host:
+
+```
+out/kernel.elf
+```
+
+Useful for:
+- CI artifacts
+- Binary inspection
+- Debugging
+
+---
+
+## Host Requirements
+
+Only **Docker** is required on the host.
+
+- Docker Engine (Linux / macOS / Windows)
+- No ARM toolchain
+- No QEMU installation
+- No Python installation
+
+Everything runs inside the container.
+
+---
+
+## CI/CD Usage
+
+This repository is directly usable in CI systems such as:
+- GitHub Actions
+- GitLab CI
+- Jenkins
+
+Example (GitHub Actions):
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t arm-baremetal-qemu .
+```
+
+---
+
+## Extending the Platform
+
+This repository is intentionally minimal and scalable.
+
+Possible extensions:
+- Add shared libraries repository
+- Add scheduler repository
+- Pin repository versions or commits
+- Auto-run QEMU in the container entrypoint
+- Add automated QEMU regression tests
+
+---
+
+## Design Principles
+
+- **Separation of concerns**
+  - Application repo → product logic
+  - Docker repo → integration and tooling
+- **Reproducibility first**
+- **CI-friendly**
+- **Zero host dependencies**
+- **Industry-standard layout**
+
+---
+
+## Author
+
+**Abhijit Dasgupta**  
+Embedded Systems | Bare-Metal | ARM Architecture | Platform Engineering
+
+---
+
+## Next Steps
+
+Potential next improvements:
+- Docker-based CI pipeline
+- Multi-repository builds (libs + app)
+- Scheduler integration
+- Automated UART/QEMU tests
