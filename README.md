@@ -248,18 +248,3 @@ Possible extensions:
 - **Industry-standard layout**
 
 ---
-
-## Author
-
-**Abhijit Dasgupta**  
-Embedded Systems | Bare-Metal | ARM Architecture | Platform Engineering
-
----
-
-## Next Steps
-
-Potential next improvements:
-- Docker-based CI pipeline
-- Multi-repository builds (libs + app)
-- Scheduler integration
-- Automated UART/QEMU tests
